@@ -6,7 +6,7 @@
 #include <addons/TokenHelper.h>
 #include <addons/RTDBHelper.h>
 
-#define SENSOR_PIN 15
+#define SENSOR_PIN GPIO_NUM_34
 
 #define AIR_MOISTURE 2610
 #define WATER_MOISTURE 900
