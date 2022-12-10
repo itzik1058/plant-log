@@ -11,70 +11,51 @@
 #define AIR_MOISTURE 2610
 #define WATER_MOISTURE 900
 
-#define SAMPLE_DELAY 1000
-#define BUFFER_SIZE 16
+#define SAMPLE_DELAY 10 // seconds
 
 #define NTP_SERVER "pool.ntp.org"
 
 void setup();
 void loop();
-int8_t mapMoisture(uint16_t moisture);
 void setupWiFi();
 void setupFirebase();
 time_t now();
+void logMoisture(uint16_t moisture);
 
-uint16_t moistureBuffer[BUFFER_SIZE];
-size_t moistureSample = 0;
-
+RTC_DATA_ATTR size_t wakeup;
 FirebaseData fbData;
 FirebaseAuth fbAuth;
 FirebaseConfig fbConfig;
 FirebaseJson fbJson;
 
-void setup() {
+void setup()
+{
   Serial.begin(9600);
-  uint16_t moisture = analogRead(SENSOR_PIN);
-  memset(moistureBuffer, moisture, BUFFER_SIZE);
+
+  esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+  Serial.printf("Wakeup %d caused by %d\n", wakeup, wakeup_reason);
+
   setupWiFi();
   setupFirebase();
   configTime(0, 0, NTP_SERVER);
-}
 
-void loop() {
   uint16_t moisture = analogRead(SENSOR_PIN);
-  moistureBuffer[moistureSample] = moisture;
-  moistureSample = ++moistureSample % BUFFER_SIZE;
-  int8_t moisturePct = mapMoisture(moisture);
-  uint16_t movingAverage = 0;
-  for (int i = 0; i < BUFFER_SIZE; i++) movingAverage += moistureBuffer[i];
-  movingAverage /= BUFFER_SIZE;
-  int8_t movingAveragePct = mapMoisture(movingAverage);
-  Serial.printf("Moisture value %d (%d%%) MA%d %d (%d%%)\n",
-                moisture, moisturePct, BUFFER_SIZE, movingAverage, movingAveragePct);
-  if (Firebase.ready()) {
-    time_t timestamp = now();
-    String path = DEVICE_NAME "/" + String(timestamp);
-    fbJson.set("/moisture", moisture);
-    fbJson.set("/timestamp", timestamp);
-    String json;
-    fbJson.toString(json, true);
-    Serial.println(json);
-    if (!Firebase.RTDB.setJSON(&fbData, path, &fbJson)) {
-      Serial.print("Logging failed: ");
-      Serial.println(fbData.errorReason());
-    }
-  }
-  delay(SAMPLE_DELAY);
+  int8_t moisturePct = map(moisture, AIR_MOISTURE, WATER_MOISTURE, 0, 100);
+  Serial.printf("Moisture value %d (%d%%)\n", moisture, moisturePct);
+  logMoisture(moisture);
+
+  esp_sleep_enable_timer_wakeup(SAMPLE_DELAY * 1000000);
+  esp_deep_sleep_start();
 }
 
-int8_t mapMoisture(uint16_t moisture) {
-  return map(moisture, AIR_MOISTURE, WATER_MOISTURE, 0, 100);
-}
+void loop() {}
 
-void setupWiFi() {
+void setupWiFi()
+{
   WiFi.begin(WIFI_SSID, WIFI_PWD);
   Serial.printf("Connecting to WiFi (SSID %s)..", WIFI_SSID);
-  while (WiFi.status() != WL_CONNECTED) {
+  while (WiFi.status() != WL_CONNECTED)
+  {
     Serial.print(".");
     delay(1000);
   }
@@ -83,28 +64,54 @@ void setupWiFi() {
   Serial.println(WiFi.localIP());
 }
 
-void setupFirebase() {
+void setupFirebase()
+{
   Firebase.reconnectWiFi(true);
   fbConfig.api_key = FIREBASE_API_KEY;
   fbConfig.database_url = FIREBASE_DATABASE_URL;
   fbConfig.token_status_callback = tokenStatusCallback;
-  if (Firebase.signUp(&fbConfig, &fbAuth, "", "")) {
+  if (Firebase.signUp(&fbConfig, &fbAuth, "", ""))
+  {
     Serial.print("Authentication successful with UID ");
     Serial.println(fbAuth.token.uid.c_str());
-  } else {
+  }
+  else
+  {
     Serial.print("Authentication failed: ");
     Serial.println(fbConfig.signer.signupError.message.c_str());
   }
   Firebase.begin(&fbConfig, &fbAuth);
 }
 
-time_t now() {
+time_t now()
+{
   time_t now;
   struct tm timeinfo;
-  if (!getLocalTime(&timeinfo)) {
+  if (!getLocalTime(&timeinfo))
+  {
     Serial.println("Failed to obtain time");
     return 0;
   }
   time(&now);
   return now;
+}
+
+void logMoisture(uint16_t moisture)
+{
+  if (!Firebase.ready()) {
+    Serial.println("Firebase is not ready");
+    return;
+  }
+  time_t timestamp = now();
+  String path = DEVICE_NAME "/" + String(timestamp);
+  fbJson.set("/moisture", moisture);
+  fbJson.set("/timestamp", timestamp);
+  String json;
+  fbJson.toString(json, true);
+  Serial.println(json);
+  if (!Firebase.RTDB.setJSON(&fbData, path, &fbJson))
+  {
+    Serial.print("Logging failed: ");
+    Serial.println(fbData.errorReason());
+  }
 }
