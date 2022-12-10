@@ -55,8 +55,8 @@ void loop() {
     time_t timestamp = now();
     String timestamp_str = String(timestamp);
     String path = String("/") + DEVICE_NAME + String("/") + timestamp_str;
-    fbJson.set("/moisture", String(moisture));
-    fbJson.set("/timestamp", timestamp_str);
+    fbJson.set("/moisture", moisture);
+    fbJson.set("/timestamp", timestamp);
     String json;
     fbJson.toString(json, true);
     Serial.println(json);
