@@ -53,8 +53,7 @@ void loop() {
                 moisture, moisturePct, BUFFER_SIZE, movingAverage, movingAveragePct);
   if (Firebase.ready()) {
     time_t timestamp = now();
-    String timestamp_str = String(timestamp);
-    String path = String("/") + DEVICE_NAME + String("/") + timestamp_str;
+    String path = DEVICE_NAME "/" + String(timestamp);
     fbJson.set("/moisture", moisture);
     fbJson.set("/timestamp", timestamp);
     String json;
